@@ -1,6 +1,8 @@
 import streamlit as st
 from spire.doc import Document
 
+import time
+
 # Streamlit app title
 st.title("Word Document Viewer")
 
@@ -10,6 +12,7 @@ uploaded_files = st.file_uploader(
 )
 
 if uploaded_files:
+    start_time = time.time()
     for uploaded_file in uploaded_files:
         # Save each uploaded file temporarily
         with open(f"temp_{uploaded_file.name}", "wb") as f:
@@ -25,6 +28,9 @@ if uploaded_files:
         # Display the filename and its content
         st.subheader(f"Contents of {uploaded_file.name}")
         st.text_area(f"Text from {uploaded_file.name}", doc_text, height=300)
+
+    end_time = time.time()
+    st.write(f"Total time taken: {end_time - start_time:.2f} seconds")
 
         # Adding a download button for each file's extracted text
         # st.download_button(
