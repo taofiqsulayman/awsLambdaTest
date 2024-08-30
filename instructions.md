@@ -60,25 +60,6 @@ aws lambda update-function-code \
 
 eu-west-1
 
-{
-    "repository": {
-        "repositoryArn": "arn:aws:ecr:eu-west-1:266025833015:repository/extraction-lambda-repo",
-        "registryId": "266025833015",
-        "repositoryName": "extraction-lambda-repo",
-        "repositoryUri": "266025833015.dkr.ecr.eu-west-1.amazonaws.com/extraction-lambda-repo",
-        "createdAt": "2024-08-29T20:59:07.001000+01:00",
-        "imageTagMutability": "MUTABLE",
-        "imageScanningConfiguration": {
-            "scanOnPush": true
-        },
-        "encryptionConfiguration": {
-            "encryptionType": "AES256"
-        }
-    }
-}
-
-
-
 extraction-lambda-function
 
 extraction-lambda-repo
