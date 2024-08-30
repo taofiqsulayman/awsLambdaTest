@@ -1,0 +1,5 @@
+boto3
+Pillow
+pymupdf
+pytesseract
+Spire.Doc
