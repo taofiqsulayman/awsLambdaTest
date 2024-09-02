@@ -9,5 +9,8 @@ RUN pip install -r requirements.txt
 # Copy all files in ./src
 COPY src/* ${LAMBDA_TASK_ROOT}
 
+# Copy the tesseract files
+COPY tess/* ${LAMBDA_TASK_ROOT}
+
 # Set the CMD to your handler.
 CMD [ "main.lambda_handler" ]

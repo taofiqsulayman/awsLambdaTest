@@ -4,7 +4,12 @@ import pytesseract
 from PIL import Image
 from io import BytesIO
 from spire.doc import Document
+import os
 import csv
+
+pytesseract.pytesseract.tesseract_cmd = os.environ["LAMBDA_TASK_ROOT"] + "/bin/tesseract"
+os.environ['TESSDATA_PREFIX'] = os.environ["LAMBDA_TASK_ROOT"] + "/tesseract/share/tessdata"
+os.environ['LD_LIBRARY_PATH'] = os.environ["LAMBDA_TASK_ROOT"] + "/lib"
 
 def process_docx(file_path):
     document = Document()

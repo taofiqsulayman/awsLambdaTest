@@ -5,6 +5,7 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from utils import process_pdf, process_docx, process_csv
 
+
 # Set up logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -13,7 +14,6 @@ s3 = boto3.client('s3')
 sqs = boto3.client('sqs')
 
 BUCKET_NAME = "extraction-buck"
-QUEUE_URL = "https://sqs.eu-west-1.amazonaws.com/266025833015/extraction-queue"
 
 def process_file(bucket, key):
     local_path = "/tmp/" + os.path.basename(key)
