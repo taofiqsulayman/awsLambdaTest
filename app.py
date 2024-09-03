@@ -1,18 +1,19 @@
-from multiprocessing import Pool, cpu_count
+import streamlit as st
+import os
+from PIL import Image
 import fitz
 import pytesseract
-from PIL import Image
 from io import BytesIO
+from multiprocessing import Pool, cpu_count
 from spire.doc import Document
-import os
 import csv
 import cv2
 import numpy as np
 import re
 
-pytesseract.pytesseract.tesseract_cmd = os.environ["LAMBDA_TASK_ROOT"] + "/bin/tesseract"
-os.environ['TESSDATA_PREFIX'] = os.environ["LAMBDA_TASK_ROOT"] + "/tesseract/share/tessdata"
-os.environ['LD_LIBRARY_PATH'] = os.environ["LAMBDA_TASK_ROOT"] + "/lib"
+# pytesseract.pytesseract.tesseract_cmd = os.environ["LAMBDA_TASK_ROOT"] + "/bin/tesseract"
+# os.environ['TESSDATA_PREFIX'] = os.environ["LAMBDA_TASK_ROOT"] + "/tesseract/share/tessdata"
+# os.environ['LD_LIBRARY_PATH'] = os.environ["LAMBDA_TASK_ROOT"] + "/lib"
 
 def process_docx(file_path):
     document = Document()
@@ -20,45 +21,29 @@ def process_docx(file_path):
     return document.GetText()
 
 def preprocess_image(image):
-    # Convert to grayscale
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    
-    # Apply OTSU threshold
     _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_OTSU | cv2.THRESH_BINARY_INV)
-    
-    # Perform dilation
     rect_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (25, 25))
     dilation = cv2.dilate(thresh, rect_kernel, iterations=1)
-    
     return gray, dilation
 
 def extract_text_with_tesseract(image):
     gray, dilation = preprocess_image(image)
-    
-    # Find contours
     contours, _ = cv2.findContours(dilation, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-    
     extracted_text = ""
     for cnt in contours:
         x, y, w, h = cv2.boundingRect(cnt)
         cropped = gray[y:y + h, x:x + w]
         text = pytesseract.image_to_string(cropped)
         extracted_text += text + "\n"
-    
     return extracted_text
 
 def post_process_text(text):
-    # Remove extra whitespace
-    text = re.sub(r'\s+', ' ', text).strip()
-    
-    # Correct common OCR errors
+    # text = re.sub(r'\s+', ' ', text).strip()
     # text = text.replace('0', 'O').replace('1', 'I').replace('5', 'S')
-    
-    # Correct case for common words
     common_words = ['the', 'and', 'of', 'to', 'in', 'is', 'it']
     for word in common_words:
         text = re.sub(r'\b' + word + r'\b', word, text, flags=re.IGNORECASE)
-    
     return text
 
 def extract_text_from_page(page):
@@ -68,7 +53,6 @@ def extract_text_from_page(page):
         img = Image.open(BytesIO(pix.tobytes()))
         img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
         text = extract_text_with_tesseract(img_cv)
-    
     return post_process_text(text)
 
 def extract_text_from_pages_single_threaded(pdf_path):
@@ -112,3 +96,32 @@ def process_csv(csv_path):
     with open(csv_path, 'r') as f:
         reader = csv.reader(f)
         return "\n".join([",".join(row) for row in reader])
+
+# Streamlit UI
+st.title("Document Text Extraction App")
+
+uploaded_file = st.file_uploader("Upload a document", type=['pdf', 'docx', 'csv', 'doc'])
+
+if uploaded_file is not None:
+    file_extension = uploaded_file.name.split('.')[-1].lower()
+    
+    if file_extension == 'pdf':
+        with open("uploaded.pdf", "wb") as f:
+            f.write(uploaded_file.getbuffer())
+        extracted_text = process_pdf("uploaded.pdf")
+        st.text_area("Extracted Text", extracted_text, height=400)
+
+    elif file_extension == 'docx':
+        with open("uploaded.docx", "wb") as f:
+            f.write(uploaded_file.getbuffer())
+        extracted_text = process_docx("uploaded.docx")
+        st.text_area("Extracted Text", extracted_text, height=400)
+
+    elif file_extension == 'csv':
+        with open("uploaded.csv", "wb") as f:
+            f.write(uploaded_file.getbuffer())
+        extracted_text = process_csv("uploaded.csv")
+        st.text_area("Extracted Text", extracted_text, height=400)
+
+    else:
+        st.error("Unsupported file type")
