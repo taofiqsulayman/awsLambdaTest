@@ -55,10 +55,10 @@ def process_file(bucket, key):
         s3.upload_file(output_local_path, bucket, output_key)
         logger.info(f"Successfully uploaded result file: {output_key}")
 
-        # # Delete the original file from uploads folder
-        # logger.info(f"Attempting to delete original file: {decoded_key}")
-        # s3.delete_object(Bucket=bucket, Key=decoded_key)
-        # logger.info(f"Successfully deleted original file: {decoded_key}")
+        # Delete the original file from uploads folder
+        logger.info(f"Attempting to delete original file: {decoded_key}")
+        s3.delete_object(Bucket=bucket, Key=decoded_key)
+        logger.info(f"Successfully deleted original file: {decoded_key}")
 
         return {"status": "success", "file_key": decoded_key, "output_key": output_key}
     except Exception as e:

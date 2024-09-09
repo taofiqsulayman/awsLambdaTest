@@ -10,6 +10,13 @@ import csv
 import cv2
 import numpy as np
 import re
+import pymupdf4llm
+
+import logging
+
+# Initialize logger
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 # pytesseract.pytesseract.tesseract_cmd = os.environ["LAMBDA_TASK_ROOT"] + "/bin/tesseract"
 # os.environ['TESSDATA_PREFIX'] = os.environ["LAMBDA_TASK_ROOT"] + "/tesseract/share/tessdata"
@@ -22,38 +29,34 @@ def process_docx(file_path):
 
 def preprocess_image(image):
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_OTSU | cv2.THRESH_BINARY_INV)
-    rect_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (25, 25))
-    dilation = cv2.dilate(thresh, rect_kernel, iterations=1)
-    return gray, dilation
+    return gray
 
 def extract_text_with_tesseract(image):
-    gray, dilation = preprocess_image(image)
-    contours, _ = cv2.findContours(dilation, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-    extracted_text = ""
-    for cnt in contours:
-        x, y, w, h = cv2.boundingRect(cnt)
-        cropped = gray[y:y + h, x:x + w]
-        text = pytesseract.image_to_string(cropped)
-        extracted_text += text + "\n"
-    return extracted_text
+    gray = preprocess_image(image)
+    text = pytesseract.image_to_string(gray)
+    return text
 
 def post_process_text(text):
-    # text = re.sub(r'\s+', ' ', text).strip()
-    # text = text.replace('0', 'O').replace('1', 'I').replace('5', 'S')
     common_words = ['the', 'and', 'of', 'to', 'in', 'is', 'it']
     for word in common_words:
         text = re.sub(r'\b' + word + r'\b', word, text, flags=re.IGNORECASE)
     return text
 
 def extract_text_from_page(page):
-    text = page.get_text("text")
-    if not text.strip():
-        pix = page.get_pixmap()
-        img = Image.open(BytesIO(pix.tobytes()))
-        img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
-        text = extract_text_with_tesseract(img_cv)
-    return post_process_text(text)
+    # Determine if OCR is needed
+    if page.get_text().strip() == "":
+        logger.info("Page requires OCR")
+        tp = page.get_textpage_ocr()
+        # text = tp.extractText()
+        # text = post_process_text(text)
+        text_raw = tp.extractText()
+        ocrpdf = fitz.open("pdf", text_raw)
+        text = pymupdf4llm.to_markdown(ocrpdf.load_page(0))
+    else:
+        logger.info("Page has text, no OCR needed")
+        pdf = fitz.open("pdf", page.get_text())
+        text = pymupdf4llm.to_markdown(pdf.load_page(0))
+    return text
 
 def extract_text_from_pages_single_threaded(pdf_path):
     extracted_text = ""
@@ -62,7 +65,6 @@ def extract_text_from_pages_single_threaded(pdf_path):
     for i in range(num_pages):
         page = doc.load_page(i)
         extracted_text += extract_text_from_page(page)
-        extracted_text += f"\n--- End of Page {i + 1} ---\n"
     return extracted_text
 
 def extract_text_from_page_indices(pdf_path, indices):
@@ -71,7 +73,6 @@ def extract_text_from_page_indices(pdf_path, indices):
     for i in indices:
         page = doc.load_page(i)
         extracted_text += extract_text_from_page(page)
-        extracted_text += f"\n--- End of Page {i + 1} ---\n"
     return extracted_text
 
 def parallel_text_extraction(pdf_path, num_pages):
@@ -109,6 +110,7 @@ if uploaded_file is not None:
         with open("uploaded.pdf", "wb") as f:
             f.write(uploaded_file.getbuffer())
         extracted_text = process_pdf("uploaded.pdf")
+        st.markdown(f"Extracted Text: \n {extracted_text}")
         st.text_area("Extracted Text", extracted_text, height=400)
 
     elif file_extension == 'docx':

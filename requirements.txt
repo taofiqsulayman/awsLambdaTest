@@ -1,6 +1,4 @@
 boto3
-Pillow
-pymupdf
-pytesseract
+marker-pdf
 Spire.Doc
-opencv-python
+pypdf2

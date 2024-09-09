@@ -1,112 +1,116 @@
-from multiprocessing import Pool, cpu_count
-import fitz
-import pytesseract
-from PIL import Image
-from io import BytesIO
+import subprocess
+from PyPDF2 import PdfReader, PdfWriter
+import uuid
 from spire.doc import Document
-import os
 import csv
-import cv2
-import numpy as np
-import re
 
-pytesseract.pytesseract.tesseract_cmd = os.environ["LAMBDA_TASK_ROOT"] + "/bin/tesseract"
-os.environ['TESSDATA_PREFIX'] = os.environ["LAMBDA_TASK_ROOT"] + "/tesseract/share/tessdata"
-os.environ['LD_LIBRARY_PATH'] = os.environ["LAMBDA_TASK_ROOT"] + "/lib"
+# Constants
+BATCH_MULTIPLIER = 3
+MAX_PAGES = None
+WORKERS = 1
+CHUNK_SIZE = 30
 
 def process_docx(file_path):
     document = Document()
     document.LoadFromFile(file_path)
     return document.GetText()
 
-def preprocess_image(image):
-    # Convert to grayscale
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    
-    # Apply OTSU threshold
-    _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_OTSU | cv2.THRESH_BINARY_INV)
-    
-    # Perform dilation
-    rect_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (25, 25))
-    dilation = cv2.dilate(thresh, rect_kernel, iterations=1)
-    
-    return gray, dilation
+def split_pdf(input_pdf_path, output_dir, chunk_size=CHUNK_SIZE):
+    input_pdf = PdfReader(str(input_pdf_path))
+    file_id = str(uuid.uuid4())
+    pdf_chunks = []
 
-def extract_text_with_tesseract(image):
-    gray, dilation = preprocess_image(image)
-    
-    # Find contours
-    contours, _ = cv2.findContours(dilation, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-    
-    extracted_text = ""
-    for cnt in contours:
-        x, y, w, h = cv2.boundingRect(cnt)
-        cropped = gray[y:y + h, x:x + w]
-        text = pytesseract.image_to_string(cropped)
-        extracted_text += text + "\n"
-    
-    return extracted_text
+    for i in range(0, len(input_pdf.pages), chunk_size):
+        pdf_writer = PdfWriter()
+        start_page = i + 1
+        end_page = min(i + chunk_size, len(input_pdf.pages))
 
-def post_process_text(text):
-    # Remove extra whitespace
-    text = re.sub(r'\s+', ' ', text).strip()
-    
-    # Correct common OCR errors
-    # text = text.replace('0', 'O').replace('1', 'I').replace('5', 'S')
-    
-    # Correct case for common words
-    common_words = ['the', 'and', 'of', 'to', 'in', 'is', 'it']
-    for word in common_words:
-        text = re.sub(r'\b' + word + r'\b', word, text, flags=re.IGNORECASE)
-    
+        for j in range(i, end_page):
+            pdf_writer.add_page(input_pdf.pages[j])
+
+        chunk_file_name = f"{file_id}_chunk_{start_page}_{end_page}.pdf"
+        chunk_path = output_dir / chunk_file_name
+
+        with open(chunk_path, "wb") as f:
+            pdf_writer.write(f)
+
+        pdf_chunks.append({
+            "file_id": file_id,
+            "original_file": input_pdf_path.name,
+            "chunk_file": chunk_path,
+            "start_page": start_page,
+            "end_page": end_page,
+        })
+
+    return pdf_chunks
+
+def run_marker_on_file(input_file, output_dir):
+    command = f"marker_single '{input_file}' '{output_dir}' --batch_multiplier {BATCH_MULTIPLIER}"
+    if MAX_PAGES:
+        command += f" --max_pages {MAX_PAGES}"
+
+    result = subprocess.run(command, shell=True, capture_output=True, text=True)
+
+    if result.returncode != 0:
+        raise Exception(f"Marker command failed for {input_file}: {result.stderr}")
+
+    return result.stdout
+
+def process_chunk(chunk, output_dir):
+    chunk_output_dir = output_dir / chunk["original_file"].rsplit(".", 1)[0]
+    chunk_output_dir.mkdir(parents=True, exist_ok=True)
+    run_marker_on_file(chunk["chunk_file"], chunk_output_dir)
+
+    return chunk
+
+def merge_chunk_results(chunks, output_dir):
+    results = {}
+    for chunk in chunks:
+        file_id = chunk["file_id"]
+        original_file = chunk["original_file"]
+        chunk_folder = output_dir / original_file.rsplit(".", 1)[0] / chunk["chunk_file"].stem
+        md_file = chunk_folder / f"{chunk['chunk_file'].stem}.md"
+
+        if md_file.exists():
+            with open(md_file, "r") as f:
+                content = f.read()
+                if file_id not in results:
+                    results[file_id] = {"original_file": original_file, "content": []}
+                results[file_id]["content"].append((chunk["start_page"], content))
+
+    final_results = []
+    for file_id, data in results.items():
+        sorted_content = sorted(data["content"], key=lambda x: x[0])
+        merged_content = "\n".join([content for _, content in sorted_content])
+        final_results.append((data["original_file"], merged_content))
+
+    return final_results
+
+def extract_text_from_pdf(pdf_reader):
+    text = ""
+    for page in pdf_reader.pages:
+        text += page.extract_text() + "\n"
     return text
 
-def extract_text_from_page(page):
-    text = page.get_text("text")
-    if not text.strip():
-        pix = page.get_pixmap()
-        img = Image.open(BytesIO(pix.tobytes()))
-        img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
-        text = extract_text_with_tesseract(img_cv)
-    
-    return post_process_text(text)
+def process_pdf(file_path, output_dir):
+    input_pdf = PdfReader(str(file_path))
+    total_pages = len(input_pdf.pages)
 
-def extract_text_from_pages_single_threaded(pdf_path):
-    extracted_text = ""
-    doc = fitz.open(pdf_path)
-    num_pages = doc.page_count
-    for i in range(num_pages):
-        page = doc.load_page(i)
-        extracted_text += extract_text_from_page(page)
-        extracted_text += f"\n--- End of Page {i + 1} ---\n"
-    return extracted_text
-
-def extract_text_from_page_indices(pdf_path, indices):
-    extracted_text = ""
-    doc = fitz.open(pdf_path)
-    for i in indices:
-        page = doc.load_page(i)
-        extracted_text += extract_text_from_page(page)
-        extracted_text += f"\n--- End of Page {i + 1} ---\n"
-    return extracted_text
-
-def parallel_text_extraction(pdf_path, num_pages):
-    cpu = cpu_count()
-    seg_size = int(num_pages / cpu + 1)
-    indices = [range(i * seg_size, min((i + 1) * seg_size, num_pages)) for i in range(cpu)]
-    with Pool() as pool:
-        results = pool.starmap(extract_text_from_page_indices, [(pdf_path, idx) for idx in indices])
-    combined_text = "".join(results)
-    return combined_text
-
-def process_pdf(file_path):
-    doc = fitz.open(file_path)
-    num_pages = doc.page_count
-    if num_pages < 10:
-        extracted_text = extract_text_from_pages_single_threaded(file_path)
+    if total_pages <= CHUNK_SIZE:
+        content = extract_text_from_pdf(input_pdf)
+        return content
     else:
-        extracted_text = parallel_text_extraction(file_path, num_pages)
-    return extracted_text
+        chunks = split_pdf(file_path, output_dir)
+        processed_chunks = []
+        for chunk in chunks:
+            processed_chunk = process_chunk(chunk, output_dir)
+            processed_chunks.append(processed_chunk)
+        
+        merged_results = merge_chunk_results(processed_chunks, output_dir)
+        if merged_results:
+            return merged_results[0][1]
+        else:
+            return ""
 
 def process_csv(csv_path):
     with open(csv_path, 'r') as f:
