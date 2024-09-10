@@ -3,9 +3,12 @@ import boto3
 import os
 import logging
 import time
+import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import unquote_plus
 from utils import process_pdf, process_docx, process_csv
+from pathlib import Path
+
 
 # Set up logging
 logger = logging.getLogger()
@@ -38,15 +41,17 @@ def process_file(bucket, key):
         logger.info(f"Attempting to download file: {decoded_key} from bucket: {bucket}")
         download_with_retry(bucket, decoded_key, local_path)
         logger.info(f"Successfully downloaded file: {decoded_key}")
-
-        if decoded_key.lower().endswith('.pdf'):
-            text = process_pdf(local_path)
-        elif decoded_key.lower().endswith('.docx') or decoded_key.lower().endswith('.doc'):
-            text = process_docx(local_path)
-        elif decoded_key.lower().endswith('.csv'):
-            text = process_csv(local_path)
-        else:
-            raise ValueError(f"Unsupported file type: {decoded_key}")
+        
+        with tempfile.TemporaryDirectory() as temp_output_dir:
+            temp_output_dir = Path(temp_output_dir)
+            if decoded_key.lower().endswith('.pdf'):
+                text = process_pdf(local_path, temp_output_dir)
+            elif decoded_key.lower().endswith('.docx') or decoded_key.lower().endswith('.doc'):
+                text = process_docx(local_path)
+            elif decoded_key.lower().endswith('.csv'):
+                text = process_csv(local_path)
+            else:
+                raise ValueError(f"Unsupported file type: {decoded_key}")
 
         with open(output_local_path, "w") as f:
             f.write(text)

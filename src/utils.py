@@ -4,6 +4,10 @@ import uuid
 from spire.doc import Document
 import csv
 
+import tempfile
+from pathlib import Path
+
+
 # Constants
 BATCH_MULTIPLIER = 3
 MAX_PAGES = None
@@ -14,7 +18,31 @@ def process_docx(file_path):
     document = Document()
     document.LoadFromFile(file_path)
     return document.GetText()
+    input_pdf = PdfReader(str(file_path))
+    total_pages = len(input_pdf.pages)
 
+    if total_pages <= CHUNK_SIZE:
+        content = extract_text_from_pdf(input_pdf)
+        return content
+    else:
+        chunks = split_pdf(file_path, output_dir)
+        processed_chunks = []
+        for chunk in chunks:
+            processed_chunk = process_chunk(chunk, output_dir)
+            processed_chunks.append(processed_chunk)
+        
+        merged_results = merge_chunk_results(processed_chunks, output_dir)
+        if merged_results:
+            return merged_results[0][1]
+        else:
+            return ""
+
+def process_csv(csv_path):
+    with open(csv_path, 'r') as f:
+        reader = csv.reader(f)
+        return "\n".join([",".join(row) for row in reader])
+    
+    
 def split_pdf(input_pdf_path, output_dir, chunk_size=CHUNK_SIZE):
     input_pdf = PdfReader(str(input_pdf_path))
     file_id = str(uuid.uuid4())
@@ -60,7 +88,6 @@ def process_chunk(chunk, output_dir):
     chunk_output_dir = output_dir / chunk["original_file"].rsplit(".", 1)[0]
     chunk_output_dir.mkdir(parents=True, exist_ok=True)
     run_marker_on_file(chunk["chunk_file"], chunk_output_dir)
-
     return chunk
 
 def merge_chunk_results(chunks, output_dir):
@@ -86,33 +113,22 @@ def merge_chunk_results(chunks, output_dir):
 
     return final_results
 
-def extract_text_from_pdf(pdf_reader):
-    text = ""
-    for page in pdf_reader.pages:
-        text += page.extract_text() + "\n"
-    return text
+def process_pdf(local_path, output_dir):
+    with tempfile.TemporaryDirectory() as temp_dir:
+        temp_dir = Path(temp_dir)
+        chunk_dir = temp_dir / "chunks"
+        chunk_dir.mkdir(parents=True, exist_ok=True)
 
-def process_pdf(file_path, output_dir):
-    input_pdf = PdfReader(str(file_path))
-    total_pages = len(input_pdf.pages)
-
-    if total_pages <= CHUNK_SIZE:
-        content = extract_text_from_pdf(input_pdf)
-        return content
-    else:
-        chunks = split_pdf(file_path, output_dir)
+        chunks = split_pdf(Path(local_path), chunk_dir)
+        
         processed_chunks = []
         for chunk in chunks:
             processed_chunk = process_chunk(chunk, output_dir)
             processed_chunks.append(processed_chunk)
+
+        results = merge_chunk_results(processed_chunks, output_dir)
         
-        merged_results = merge_chunk_results(processed_chunks, output_dir)
-        if merged_results:
-            return merged_results[0][1]
+        if results:
+            return results[0][1]  # Return the merged content
         else:
             return ""
-
-def process_csv(csv_path):
-    with open(csv_path, 'r') as f:
-        reader = csv.reader(f)
-        return "\n".join([",".join(row) for row in reader])
