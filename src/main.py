@@ -10,6 +10,8 @@ from utils import process_pdf, process_docx, process_csv
 from pathlib import Path
 
 
+os.environ['TRANSFORMERS_CACHE'] = '/tmp/.cache/huggingface'
+
 # Set up logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)

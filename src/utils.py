@@ -3,9 +3,13 @@ from PyPDF2 import PdfReader, PdfWriter
 import uuid
 from spire.doc import Document
 import csv
+import os
 
 import tempfile
 from pathlib import Path
+
+os.environ['TRANSFORMERS_CACHE'] = '/tmp/.cache/huggingface'
+
 
 
 # Constants
@@ -77,7 +81,10 @@ def run_marker_on_file(input_file, output_dir):
     if MAX_PAGES:
         command += f" --max_pages {MAX_PAGES}"
 
-    result = subprocess.run(command, shell=True, capture_output=True, text=True)
+    # Ensure the TRANSFORMERS_CACHE directory exists
+    os.makedirs(os.environ['TRANSFORMERS_CACHE'], exist_ok=True)
+
+    result = subprocess.run(command, shell=True, capture_output=True, text=True, env=os.environ)
 
     if result.returncode != 0:
         raise Exception(f"Marker command failed for {input_file}: {result.stderr}")
