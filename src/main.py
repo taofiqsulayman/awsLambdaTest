@@ -16,7 +16,7 @@ logger.setLevel(logging.INFO)
 
 s3 = boto3.client('s3')
 
-BUCKET_NAME = "extraction-buck"
+BUCKET_NAME = "extraction-buck-marker"
 
 def download_with_retry(bucket, key, local_path, retries=2, wait=2):
     for i in range(retries):
