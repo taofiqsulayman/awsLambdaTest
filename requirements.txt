@@ -1,5 +1,12 @@
 boto3
 Pillow
 pymupdf
-pytesseract
 Spire.Doc
+pymupdf4llm
+paddlepaddle 
+paddleocr
+tabulate
+setuptools
+
+# for local testing
+streamlit
