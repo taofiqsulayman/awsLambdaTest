@@ -8,14 +8,14 @@ from multiprocessing import Pool, cpu_count
 import fitz  # PyMuPDF
 import numpy as np
 import pandas as pd  # Import pandas for CSV, XLSX, and TSV reading
-import pymupdf4llm
+import pytesseract
 import streamlit as st
-from paddleocr import PaddleOCR
-from PIL import Image, ImageEnhance, ImageOps
+from PIL import Image
 from spire.doc import Document
 
-# Initialize PaddleOCR
-ocr = PaddleOCR(use_angle_cls=True, lang="en")
+# pytesseract.pytesseract.tesseract_cmd = os.environ["LAMBDA_TASK_ROOT"] + "/bin/tesseract"
+# os.environ['TESSDATA_PREFIX'] = os.environ["LAMBDA_TASK_ROOT"] + "/tesseract/share/tessdata"
+# os.environ['LD_LIBRARY_PATH'] = os.environ["LAMBDA_TASK_ROOT"] + "/lib"
 
 
 def extract_text_from_pages_single_threaded(pdf_path):
@@ -24,87 +24,40 @@ def extract_text_from_pages_single_threaded(pdf_path):
     num_pages = doc.page_count
     for i in range(num_pages):
         page = doc.load_page(i)
-        check_text = page.get_text("text")
-        text = pymupdf4llm.to_markdown(pdf_path, pages=[i])
-        if not check_text.strip():
-            text = extract_text_with_paddleocr(pdf_path, pages=[i])
-        extracted_text += text
+        extracted_text += page.get_text("text")
+        if not extracted_text.strip():
+            extracted_text = extract_text_with_tesseract(pdf_path)
     return extracted_text
-
 
 def extract_text_from_page_indices(pdf_path, indices):
     extracted_text = ""
     doc = fitz.open(pdf_path)
     for i in indices:
         page = doc.load_page(i)
-        check_text = page.get_text("text")
-        text = pymupdf4llm.to_markdown(pdf_path, pages=[i])
-        if not check_text.strip():
-            text = extract_text_with_paddleocr(pdf_path, pages=[i])
-        extracted_text += text
+        extracted_text += page.get_text("text")
+        if not extracted_text.strip():
+            extracted_text = extract_text_with_tesseract(pdf_path, pages=[i])
     return extracted_text
 
-
-def enhance_image(image):
-    """Enhance the image quality to improve OCR accuracy."""
-    # Convert to grayscale
-    image = ImageOps.grayscale(image)
-
-    # Apply sharpening
-    enhancer = ImageEnhance.Sharpness(image)
-    image = enhancer.enhance(2.0)
-
-    # Apply contrast enhancement
-    enhancer = ImageEnhance.Contrast(image)
-    image = enhancer.enhance(1.5)
-
-    # Apply brightness enhancement
-    enhancer = ImageEnhance.Brightness(image)
-    image = enhancer.enhance(1.5)
-
-    return image
-
-
-def extract_text_with_paddleocr(pdf_path, pages=None):
-    """Extract text from PDF using OCR (PaddleOCR) and convert it to Markdown."""
+def extract_text_with_tesseract(pdf_path, pages=None):
     extracted_text = ""
     doc = fitz.open(pdf_path)
     page_range = range(doc.page_count) if pages is None else pages
-
     for i in page_range:
         page = doc.load_page(i)
-        pix = page.get_pixmap()  # Get image of the page
+        pix = page.get_pixmap()
         image = Image.open(BytesIO(pix.tobytes(output="png")))
-
-        # Enhance the image for better OCR results
-        enhanced_image = enhance_image(image)
-
-        # Run OCR on the enhanced image
-        result = ocr.ocr(
-            np.array(enhanced_image), slice=False, cls=True, det=True, rec=True
-        )
-
-        # Extract recognized text and format it as Markdown
-        text = "\n".join([line[-1][0] for line in result[0]])
-        markdown_text = text_to_markdown(text)  # Convert OCR result to Markdown
-
-        extracted_text += markdown_text
+        extracted_text += pytesseract.image_to_string(image)
     return extracted_text
-
 
 def parallel_text_extraction(pdf_path, num_pages):
     cpu = cpu_count()
     seg_size = int(num_pages / cpu + 1)
-    indices = [
-        range(i * seg_size, min((i + 1) * seg_size, num_pages)) for i in range(cpu)
-    ]
+    indices = [range(i * seg_size, min((i + 1) * seg_size, num_pages)) for i in range(cpu)]
     with Pool() as pool:
-        results = pool.starmap(
-            extract_text_from_page_indices, [(pdf_path, idx) for idx in indices]
-        )
+        results = pool.starmap(extract_text_from_page_indices, [(pdf_path, idx) for idx in indices])
     combined_text = "".join(results)
     return combined_text
-
 
 def process_pdf(file_path):
     doc = fitz.open(file_path)
@@ -114,13 +67,6 @@ def process_pdf(file_path):
     else:
         extracted_text = parallel_text_extraction(file_path, num_pages)
     return extracted_text
-
-
-def text_to_markdown(text):
-    markdown_text = ""
-    for line in text.split("\n"):
-        markdown_text += f"{line}\n\n"
-    return markdown_text
 
 
 def convert_table_to_markdown(df):
@@ -146,15 +92,7 @@ def process_image(file_path):
     """Process image files using OCR and convert to Markdown."""
     image = Image.open(file_path)
 
-    # Enhance the image for better OCR results
-    enhanced_image = enhance_image(image)
-
-    # Run OCR on the enhanced image
-    result = ocr.ocr(np.array(enhanced_image), slice=False)
-
-    # Extract recognized text and format it as Markdown
-    text = "\n".join([line[-1][0] for line in result[0]])
-    return text_to_markdown(text)
+    return pytesseract.image_to_string(image)
 
 
 def process_docx(file_path):
@@ -181,7 +119,7 @@ def process_file(file_path):
 #  streamlit app
 
 # Streamlit App
-st.title("Multiple File Text Extraction and Markdown Conversion")
+st.title("Multiple File Text Extraction with tesseract")
 
 # Use session state to store uploaded files
 if "uploaded_files" not in st.session_state:
