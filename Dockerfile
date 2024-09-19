@@ -1,5 +1,10 @@
 FROM public.ecr.aws/lambda/python:3.11
 
+# Install system dependencies
+RUN yum update -y && yum install -y \
+    mesa-libGL \
+    && yum clean all
+
 # Copy requirements.txt
 COPY requirements.txt ${LAMBDA_TASK_ROOT}
 
