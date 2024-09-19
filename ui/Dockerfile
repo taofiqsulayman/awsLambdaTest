@@ -8,9 +8,8 @@ COPY . /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
-    build-essential \
-    curl \
-    software-properties-common \
+    libgl1-mesa-glx \
+    glibc-source=2.23-0ubuntu11.3 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies

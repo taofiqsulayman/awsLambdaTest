@@ -3,6 +3,7 @@ FROM public.ecr.aws/lambda/python:3.11
 # Install system dependencies
 RUN yum update -y && yum install -y \
     mesa-libGL \
+    glibc-2.23-55.el7 \
     && yum clean all
 
 # Copy requirements.txt
