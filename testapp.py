@@ -15,7 +15,8 @@ from PIL import Image, ImageEnhance, ImageOps
 from spire.doc import Document
 
 # Initialize PaddleOCR
-ocr = PaddleOCR(use_angle_cls=True, lang="en")
+# ocr = PaddleOCR(use_angle_cls=True, lang="en")
+ocr = PaddleOCR(use_angle_cls=True, lang='en', ocr_version='PP-OCRv4', use_space_char=True)
 
 
 def extract_text_from_pages_single_threaded(pdf_path):

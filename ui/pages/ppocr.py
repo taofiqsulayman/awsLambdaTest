@@ -1,4 +1,8 @@
+import streamlit as st
 import os
+from pathlib import Path
+import tempfile
+import time
 from io import BytesIO
 from multiprocessing import Pool, cpu_count
 
@@ -10,6 +14,8 @@ from paddleocr import PaddleOCR
 from PIL import Image, ImageEnhance, ImageOps
 from spire.doc import Document
 
+# Initialize PaddleOCR
+# ocr = PaddleOCR(use_angle_cls=True, lang="en")
 ocr = PaddleOCR(use_angle_cls=True, lang='en', ocr_version='PP-OCRv4', use_space_char=True)
 
 
@@ -61,7 +67,6 @@ def enhance_image(image):
 
 
 def extract_text_with_paddleocr(pdf_path, pages=None):
-    """Extract text from PDF using OCR (PaddleOCR) and convert it to Markdown."""
     extracted_text = ""
     doc = fitz.open(pdf_path)
     page_range = range(doc.page_count) if pages is None else pages
@@ -119,12 +124,10 @@ def text_to_markdown(text):
 
 
 def convert_table_to_markdown(df):
-    """Convert pandas DataFrame to Markdown table."""
     return df.to_markdown(index=False) + "\n\n"
 
 
 def process_csv_xlsx_tsv(file_path):
-    """Process CSV, XLSX, and TSV files and convert to Markdown."""
     ext = os.path.splitext(file_path)[1].lower()
 
     if ext == ".csv":
@@ -138,16 +141,12 @@ def process_csv_xlsx_tsv(file_path):
 
 
 def process_image(file_path):
-    """Process image files using OCR and convert to Markdown."""
     image = Image.open(file_path)
 
-    # Enhance the image for better OCR results
     enhanced_image = enhance_image(image)
 
-    # Run OCR on the enhanced image
     result = ocr.ocr(np.array(enhanced_image), slice=False)
 
-    # Extract recognized text and format it as Markdown
     text = "\n".join([line[-1][0] for line in result[0]])
     return text_to_markdown(text)
 
@@ -156,3 +155,76 @@ def process_docx(file_path):
     document = Document()
     document.LoadFromFile(file_path)
     return document.GetText()
+
+
+def process_file(file_path):
+    if file_path.suffix == ".pdf":
+        extracted_text = process_pdf(file_path)
+    elif file_path.suffix in [".docx", ".doc"]:
+        extracted_text = process_docx(file_path)
+    elif file_path.suffix in [".csv", ".tsv", ".xlsx"]:
+        extracted_text = process_csv_xlsx_tsv(file_path)
+    elif file_path.suffix in [".png", ".jpg", ".jpeg"]:
+        extracted_text = process_image(file_path)
+    else:
+        raise ValueError(f"Unsupported file type: {file_path}")
+
+    return extracted_text
+
+
+# Streamlit App
+st.title("Multiple File Text Extraction")
+
+st.markdown(
+    """
+    This app uses PaddleOCR for OCR and PyMuPDF for PDF processing.
+    """
+)
+
+# Use session state to store uploaded files
+if "uploaded_files" not in st.session_state:
+    st.session_state.uploaded_files = []
+
+uploaded_files = st.file_uploader(
+    "Choose files",
+    type=["pdf", "csv", "xlsx", "tsv", "png", "jpg", "jpeg", "docx", "doc"],
+    accept_multiple_files=True,
+)
+
+if uploaded_files:
+    st.session_state.uploaded_files = uploaded_files
+
+if st.button("Process Files"):
+    if st.session_state.uploaded_files:
+        with st.spinner("Processing files..."):
+            start_time = time.time()
+            results = []
+
+            # Create temporary directory for input
+            with tempfile.TemporaryDirectory() as temp_dir:
+                input_dir = Path(temp_dir) / "input"
+                input_dir.mkdir()
+
+                for uploaded_file in st.session_state.uploaded_files:
+                    # Save uploaded file to temporary directory
+                    input_file = input_dir / uploaded_file.name
+                    with open(input_file, "wb") as f:
+                        f.write(uploaded_file.getbuffer())
+
+                    # Process file
+                    result = process_file(input_file)
+                    results.append((uploaded_file.name, result))
+
+            end_time = time.time()
+            elapsed_time = end_time - start_time
+            st.success(
+                f"Files processed successfully. Elapsed time: {elapsed_time:.2f} seconds."
+            )
+
+            # Display results
+            for filename, result in results:
+                with st.expander(f"Contents of {filename}"):
+                    st.text(f"Content length: {len(result)} characters")
+                    st.markdown(result)
+    else:
+        st.warning("No files uploaded.")

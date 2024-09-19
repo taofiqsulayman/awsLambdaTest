@@ -5,7 +5,7 @@ import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import unquote_plus
-from utils import process_pdf, process_docx, process_csv
+from utils import process_pdf, process_docx, process_csv_xlsx_tsv, process_image 
 
 # Set up logging
 logger = logging.getLogger()
@@ -13,7 +13,7 @@ logger.setLevel(logging.INFO)
 
 s3 = boto3.client('s3')
 
-BUCKET_NAME = "extraction-buck"
+# BUCKET_NAME = "extraction-buck-paddle"
 
 def download_with_retry(bucket, key, local_path, retries=2, wait=2):
     for i in range(retries):
@@ -43,8 +43,10 @@ def process_file(bucket, key):
             text = process_pdf(local_path)
         elif decoded_key.lower().endswith('.docx') or decoded_key.lower().endswith('.doc'):
             text = process_docx(local_path)
-        elif decoded_key.lower().endswith('.csv'):
-            text = process_csv(local_path)
+        elif decoded_key.lower().endswith('.csv') or decoded_key.lower().endswith('.xlsx') or decoded_key.lower().endswith('.tsv'):
+            text = process_csv_xlsx_tsv(local_path)
+        elif decoded_key.lower().endswith('.jpg') or decoded_key.lower().endswith('.jpeg') or decoded_key.lower().endswith('.png'):
+            text = process_image(local_path)
         else:
             raise ValueError(f"Unsupported file type: {decoded_key}")
 
@@ -55,10 +57,10 @@ def process_file(bucket, key):
         s3.upload_file(output_local_path, bucket, output_key)
         logger.info(f"Successfully uploaded result file: {output_key}")
 
-        # # Delete the original file from uploads folder
-        # logger.info(f"Attempting to delete original file: {decoded_key}")
-        # s3.delete_object(Bucket=bucket, Key=decoded_key)
-        # logger.info(f"Successfully deleted original file: {decoded_key}")
+        # # Delete the original file from uploads folder        
+        logger.info(f"Attempting to delete original file: {decoded_key}")
+        s3.delete_object(Bucket=bucket, Key=decoded_key)
+        logger.info(f"Successfully deleted original file: {decoded_key}")
 
         return {"status": "success", "file_key": decoded_key, "output_key": output_key}
     except Exception as e:
