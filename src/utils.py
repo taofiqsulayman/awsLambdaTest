@@ -1,45 +1,33 @@
-import subprocess
-from PyPDF2 import PdfReader, PdfWriter
-import uuid
-from spire.doc import Document
-import csv
 import os
 
+PATH = '/tmp/NEW_MODEL_CACHE/'
+os.makedirs(PATH, exist_ok=True)
+
+os.environ['TRANSFORMERS_CACHE'] = PATH
+os.environ['HF_HOME'] = PATH
+os.environ['HF_DATASETS_CACHE'] = PATH
+os.environ['TORCH_HOME'] = PATH
+
+
+import subprocess
+import uuid
+import csv
 import tempfile
 from pathlib import Path
-
-os.environ['TRANSFORMERS_CACHE'] = '/tmp/.cache/huggingface'
-
+from PyPDF2 import PdfReader, PdfWriter
+from spire.doc import Document
 
 
 # Constants
-BATCH_MULTIPLIER = 3
+BATCH_MULTIPLIER = 4
 MAX_PAGES = None
 WORKERS = 1
-CHUNK_SIZE = 30
+CHUNK_SIZE = 20
 
 def process_docx(file_path):
     document = Document()
     document.LoadFromFile(file_path)
     return document.GetText()
-    input_pdf = PdfReader(str(file_path))
-    total_pages = len(input_pdf.pages)
-
-    if total_pages <= CHUNK_SIZE:
-        content = extract_text_from_pdf(input_pdf)
-        return content
-    else:
-        chunks = split_pdf(file_path, output_dir)
-        processed_chunks = []
-        for chunk in chunks:
-            processed_chunk = process_chunk(chunk, output_dir)
-            processed_chunks.append(processed_chunk)
-        
-        merged_results = merge_chunk_results(processed_chunks, output_dir)
-        if merged_results:
-            return merged_results[0][1]
-        else:
-            return ""
 
 def process_csv(csv_path):
     with open(csv_path, 'r') as f:
@@ -80,9 +68,6 @@ def run_marker_on_file(input_file, output_dir):
     command = f"marker_single '{input_file}' '{output_dir}' --batch_multiplier {BATCH_MULTIPLIER}"
     if MAX_PAGES:
         command += f" --max_pages {MAX_PAGES}"
-
-    # Ensure the TRANSFORMERS_CACHE directory exists
-    os.makedirs(os.environ['TRANSFORMERS_CACHE'], exist_ok=True)
 
     result = subprocess.run(command, shell=True, capture_output=True, text=True, env=os.environ)
 

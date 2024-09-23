@@ -6,12 +6,20 @@ import time
 import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import unquote_plus
-from utils import process_pdf, process_docx, process_csv
 from pathlib import Path
 
 
-os.environ['TRANSFORMERS_CACHE'] = '/tmp/.cache/huggingface'
+PATH = '/tmp/NEW_MODEL_CACHE/'
+os.makedirs(PATH, exist_ok=True)
 
+os.environ['TRANSFORMERS_CACHE'] = PATH
+os.environ['HF_HOME'] = PATH
+os.environ['HF_DATASETS_CACHE'] = PATH
+os.environ['TORCH_HOME'] = PATH
+
+
+
+from utils import process_pdf, process_docx, process_csv
 # Set up logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
