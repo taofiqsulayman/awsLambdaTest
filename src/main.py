@@ -5,7 +5,8 @@ import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import unquote_plus
-from utils import process_pdf, process_docx, process_csv
+from utils import process_pdf, process_docx, process_csv, convert_doc_to_docx
+
 
 # Set up logging
 logger = logging.getLogger()
@@ -33,6 +34,7 @@ def process_file(bucket, key):
     local_path = "/tmp/" + os.path.basename(decoded_key)
     output_key = decoded_key.replace("uploads/", "results/").rsplit(".", 1)[0] + ".txt"
     output_local_path = "/tmp/" + os.path.basename(output_key)
+    doc_output_dir = "/tmp/doc"
 
     try:
         logger.info(f"Attempting to download file: {decoded_key} from bucket: {bucket}")
@@ -41,8 +43,12 @@ def process_file(bucket, key):
 
         if decoded_key.lower().endswith('.pdf'):
             text = process_pdf(local_path)
-        elif decoded_key.lower().endswith('.docx') or decoded_key.lower().endswith('.doc'):
+        elif decoded_key.lower().endswith('.docx'):
             text = process_docx(local_path)
+        elif decoded_key.lower().endswith('.doc'):
+            docx_file_path = convert_doc_to_docx(local_path, doc_output_dir)
+            text = process_docx(docx_file_path)
+
         elif decoded_key.lower().endswith('.csv'):
             text = process_csv(local_path)
         else:

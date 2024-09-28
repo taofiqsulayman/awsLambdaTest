@@ -1,18 +1,23 @@
+import streamlit as st
 from multiprocessing import Pool, cpu_count
 import fitz
-import pytesseract
-from PIL import Image
-from io import BytesIO
-from spire.doc import Document
-import os
-import csv
 import tempfile
 import subprocess
 from pathlib import Path
+import pytesseract
+from PIL import Image
+from io import BytesIO
+from docx import Document
+import docx
+import csv
+import os
 
-pytesseract.pytesseract.tesseract_cmd = os.environ["LAMBDA_TASK_ROOT"] + "/bin/tesseract"
-os.environ['TESSDATA_PREFIX'] = os.environ["LAMBDA_TASK_ROOT"] + "/tesseract/share/tessdata"
-os.environ['LD_LIBRARY_PATH'] = os.environ["LAMBDA_TASK_ROOT"] + "/lib"
+# Initialize environment variables for Tesseract if needed
+pytesseract.pytesseract.tesseract_cmd = os.getenv("LAMBDA_TASK_ROOT", "") + "/bin/tesseract"
+os.environ['TESSDATA_PREFIX'] = os.getenv("LAMBDA_TASK_ROOT", "") + "/tesseract/share/tessdata"
+os.environ['LD_LIBRARY_PATH'] = os.getenv("LAMBDA_TASK_ROOT", "") + "/lib"
+
+
 
 
 def process_docx(file):
@@ -68,6 +73,7 @@ def convert_doc_to_docx(doc_file_path, output_dir):
         print("LibreOffice is not installed or not found in PATH.")
     except subprocess.CalledProcessError as e:
         print(f"An error occurred during conversion: {e}")
+
 
 
 def extract_text_from_pages_single_threaded(pdf_path):
@@ -127,3 +133,49 @@ def process_csv(csv_path):
     with open(csv_path, 'r') as f:
         reader = csv.reader(f)
         return "\n".join([",".join(row) for row in reader])
+
+# Streamlit App
+st.title("Document Processing App")
+
+# File upload
+uploaded_file = st.file_uploader("Upload a PDF, DOCX, DOC, or CSV file", type=["pdf", "docx", "doc", "csv"])
+
+if uploaded_file is not None:
+    # Process based on file type
+    file_type = uploaded_file.name.split('.')[-1]
+    
+    if file_type == "pdf":
+        with open(uploaded_file.name, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+        st.write("Extracting text from PDF...")
+        extracted_text = process_pdf(uploaded_file.name)
+        st.text_area("Extracted Text", value=extracted_text, height=300)
+    
+    elif file_type == "docx":
+        with open(uploaded_file.name, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+        st.write("Extracting text from DOCX...")
+        extracted_text = process_docx(uploaded_file.name)
+        st.text_area("Extracted Text", value=extracted_text, height=300)
+
+    elif file_type == "doc":
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.doc') as temp_doc_file:
+            temp_doc_file.write(uploaded_file.getbuffer())
+            temp_doc_file.flush()
+
+            output_dir = tempfile.mkdtemp()
+            docx_file_path = convert_doc_to_docx(temp_doc_file.name, output_dir)
+
+            if docx_file_path:
+                st.write("Extracting text from DOC...")
+                extracted_text = process_docx(docx_file_path)
+                st.text_area("Extracted Text", value=extracted_text, height=300)
+
+            # Clean up temporary files
+            os.remove(temp_doc_file.name)
+            os.remove(docx_file_path)
+
+    elif file_type == "csv":
+        st.write("Processing CSV...")
+        extracted_text = process_csv(uploaded_file)
+        st.text_area("CSV Content", value=extracted_text, height=300)
