@@ -11,10 +11,22 @@ pytesseract.pytesseract.tesseract_cmd = os.environ["LAMBDA_TASK_ROOT"] + "/bin/t
 os.environ['TESSDATA_PREFIX'] = os.environ["LAMBDA_TASK_ROOT"] + "/tesseract/share/tessdata"
 os.environ['LD_LIBRARY_PATH'] = os.environ["LAMBDA_TASK_ROOT"] + "/lib"
 
-def process_docx(file_path):
-    document = Document()
-    document.LoadFromFile(file_path)
-    return document.GetText()
+
+def process_word_docs(file_path):
+    text = ""
+        if file_path.suffix == ".doc":
+            # Convert .doc to plain text using antiword
+            result = subprocess.run(["antiword", file_path], capture_output=True, text=True)
+            plain_text = result.stdout
+        elif file_path.suffix == ".docx":
+            # Load .docx file
+            doc = Document(file_path)
+            full_text = [para.text for para in doc.paragraphs]
+            plain_text = "\n".join(full_text)
+        else:
+            raise ValueError("Unsupported file format. Please use a .doc or .docx file.")
+    text = plain_text
+    return text
 
 def extract_text_from_pages_single_threaded(pdf_path):
     extracted_text = ""

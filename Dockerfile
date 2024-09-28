@@ -1,5 +1,13 @@
 FROM public.ecr.aws/lambda/python:3.11
 
+# Install dependencies for LibreOffice
+RUN yum -y update && yum install -y \
+    antiword \
+    poppler-utils \
+    mesa-libGL \
+    mesa-libGLU \
+    && yum clean all
+
 # Copy requirements.txt
 COPY requirements.txt ${LAMBDA_TASK_ROOT}
 

@@ -3,3 +3,4 @@ Pillow
 pymupdf
 pytesseract
 Spire.Doc
+streamlit

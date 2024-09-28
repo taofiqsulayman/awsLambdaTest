@@ -5,7 +5,7 @@ import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import unquote_plus
-from utils import process_pdf, process_docx, process_csv
+from utils import process_pdf, process_word_docs, process_csv
 
 # Set up logging
 logger = logging.getLogger()
@@ -42,7 +42,7 @@ def process_file(bucket, key):
         if decoded_key.lower().endswith('.pdf'):
             text = process_pdf(local_path)
         elif decoded_key.lower().endswith('.docx') or decoded_key.lower().endswith('.doc'):
-            text = process_docx(local_path)
+            text = process_word_docs(local_path)
         elif decoded_key.lower().endswith('.csv'):
             text = process_csv(local_path)
         else:
