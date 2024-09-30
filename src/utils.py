@@ -13,11 +13,12 @@ os.environ['LD_LIBRARY_PATH'] = os.environ["LAMBDA_TASK_ROOT"] + "/lib"
 
 def process_word_docs(file_path):
     text = ""
-    if file_path.suffix == ".doc":
+    root_ext = os.path.splitext(file_path) 
+    if root_ext[1] == ".doc":
         # Convert .doc to plain text using antiword
         result = subprocess.run(["antiword", file_path], capture_output=True, text=True)
         plain_text = result.stdout
-    elif file_path.suffix == ".docx":
+    elif root_ext[1] == ".docx":
         # Load .docx file
         doc = Document(file_path)
         full_text = [para.text for para in doc.paragraphs]
