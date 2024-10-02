@@ -3,8 +3,12 @@ import fitz
 import pytesseract
 from PIL import Image
 from io import BytesIO
+from docx import Document 
+import subprocess 
 import os
 import csv
+
+
 
 pytesseract.pytesseract.tesseract_cmd = os.environ["LAMBDA_TASK_ROOT"] + "/bin/tesseract"
 os.environ['TESSDATA_PREFIX'] = os.environ["LAMBDA_TASK_ROOT"] + "/tesseract/share/tessdata"
