@@ -8,6 +8,10 @@ RUN yum -y update && yum install -y \
     mesa-libGLU \
     && yum clean all
 
+
+# Check where antiword is installed and add it to the PATH
+RUN echo "Antiword installed at: $(which antiword)" && ln -s $(which antiword) /usr/local/bin/antiword
+
 # Copy requirements.txt
 COPY requirements.txt ${LAMBDA_TASK_ROOT}
 
